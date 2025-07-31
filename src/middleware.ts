@@ -1,39 +1,51 @@
-import { createServerClient } from '@supabase/ssr'
-import { NextResponse } from 'next/server'
-import type { NextRequest } from 'next/server'
+import { createServerClient } from "@supabase/ssr";
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
 export async function middleware(req: NextRequest) {
-  const res = NextResponse.next()
+  const res = NextResponse.next();
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
+  // Check if environment variables are available
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    // If Supabase credentials are not available, just pass through
+    return res;
+  }
+
+  try {
+    const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
       cookies: {
         getAll() {
           return req.cookies.getAll().map(({ name, value }) => ({
             name,
             value,
-          }))
+          }));
         },
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value, options }) => {
-            req.cookies.set(name, value)
-            res.cookies.set(name, value, options)
-          })
+            req.cookies.set(name, value);
+            res.cookies.set(name, value, options);
+          });
         },
       },
+    });
+
+    // Refresh session if expired - required for Server Components
+    const {
+      data: { session },
+      error,
+    } = await supabase.auth.getSession();
+
+    if (error) {
+      // Auth session error handling without console.error
     }
-  )
-
-  // Refresh session if expired - required for Server Components
-  const { data: { session }, error } = await supabase.auth.getSession()
-
-  if (error) {
-    // Auth session error handling without console.error
+  } catch (error) {
+    // If there's an error with Supabase client, just pass through
   }
 
-  return res
+  return res;
 }
 
 // Ensure the middleware is only called for relevant paths
@@ -47,6 +59,6 @@ export const config = {
      * - public (public files)
      * - api/polar/webhook (webhook endpoints)
      */
-    '/((?!_next/static|_next/image|favicon.ico|public|api/payments/webhook).*)',
+    "/((?!_next/static|_next/image|favicon.ico|public|api/payments/webhook).*)",
   ],
-}
+};
